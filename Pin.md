@@ -1,0 +1,15 @@
+1.SDA.1: 
+  BCM 2, wPi 8
+2.SCL.1:
+  BCM 3, wPi 9
+3.MOSI
+  BCM 10, wPi 12
+4.MISO
+  BCM 9, wPi 13
+5.SCLK
+  BCM 11, wPi 14
+6.SCS
+  BCM 5, wPi 21
+
+
+LMP91000的I2C地址 0x48, 0x57
