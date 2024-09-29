@@ -17,7 +17,7 @@ MENB_INT = 6
 SDRDY = 26
 LED = 18  # GPIO1
 
-lmp91000_evm = LMP91000_EVM(SDA, SCL, MOSI_PIN, MISO_PIN, SCLK_PIN, CS_PIN, MENB_INT, SDRDY, LED)
+lmp91000_evm = LMP91000_EVM.LMP91000_EVM(SDA, SCL, MOSI_PIN, MISO_PIN, SCLK_PIN, CS_PIN, MENB_INT, SDRDY, LED)
 
 def run_ca(bias_voltage_mv, total_time_ms, sample_interval_ms, tia_gain, tia_zero, current_range):
     """

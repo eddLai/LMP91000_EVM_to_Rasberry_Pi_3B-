@@ -4,10 +4,11 @@ import time
 
 class LMP91000_EVM:
     def __init__(self, sda, scl, mosi, miso, sclk, cs, menb, sdrdy, led_debug) -> None:
+        bus_num = None
         if sda == 2 & scl == 3: bus_num = 1 
         else: print("U should use I2C.1")
-        self.potentialStat = LMP91000(bus_num, menb) #include set BCM mode
-        self.adc = ADC161S626(cs, mosi, miso, sclk, adc_ref=3.3)
+        self.potentialStat = LMP91000.LMP91000(bus_num, menb) #include set BCM mode
+        self.adc = ADC161S626.ADC161S626(cs, mosi, miso, sclk, adc_vref=3.3)
 
     def getVolt(self):
         return self.adc.get_Volt()
