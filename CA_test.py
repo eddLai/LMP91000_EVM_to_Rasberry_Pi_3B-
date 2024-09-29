@@ -1,7 +1,12 @@
-import RPi.GPIO as GPIO
+from LMP91000_EVM import LMP91000_EVM
+from LMP91000 import TIA_BIAS, NUM_TIA_BIAS
 import time
-import LMP91000_EVM
-import LMP91000
+import math
+
+# Define constants
+opVolt = 3300  # milliVolts
+resolution = 16  # bits
+step = 0  # Global step counter
 
 # Unit: mV, ms
 SDA = 2  # SDA.1
@@ -19,84 +24,71 @@ LED = 18  # GPIO1
 
 lmp91000_evm = LMP91000_EVM(SDA, SCL, MOSI_PIN, MISO_PIN, SCLK_PIN, CS_PIN, MENB_INT, SDRDY, LED)
 
-def run_ca(bias_voltage_mv, total_time_ms, sample_interval_ms, tia_gain, tia_zero, current_range):
-    """
-    Perform constant potential coulometry (CA) measurement.
+def determineLMP91000Bias(voltage):
+    polarity = -1 if voltage < 0 else 1
+    voltage = abs(voltage)
+    if voltage == 0:
+        return 0
+    for i in range(NUM_TIA_BIAS - 1):
+        v1 = opVolt * TIA_BIAS[i]
+        v2 = opVolt * TIA_BIAS[i + 1]
+        if voltage == v1:
+            return polarity * i
+        elif v1 < voltage < v2:
+            return polarity * (i if abs(voltage - v1) < abs(voltage - v2) else i + 1)
+    return 0
 
-    :param bias_voltage_mv: Bias voltage in millivolts (mV)
-    :param total_time_ms: Total measurement time in milliseconds (ms)
-    :param sample_interval_ms: Sampling interval in milliseconds (ms)
-    :param tia_gain: TIA gain setting (based on LMP91000 configuration)
-    :param tia_zero: TIA zero setting (based on LMP91000 configuration)
-    :param current_range: Current range indicator (e.g., 12 for pA, 9 for nA, etc.)
-    """
-    # Configure LMP91000
-    lmp91000_evm.potentialStat.setTIAGain(tia_gain)
-    lmp91000_evm.potentialStat.setTIAZero(tia_zero)
-    lmp91000_evm.potentialStat.setBias(bias_voltage_mv)
-    lmp91000_evm.potentialStat.setMode(LMP91000.MODE_AMPEROMETRIC)
-    
-    # Wait for the device to stabilize
-    time.sleep(0.1)
-    
-    # Initialize data storage
-    times = []
-    currents = []
-    current_unit = {
-        12: "pA",
-        9: "nA",
-        6: "μA",
-        3: "mA"
-    }.get(current_range, "Unknown Unit")
-    
-    print(f"Starting constant potential coulometry measurement, bias: {bias_voltage_mv} mV, total time: {total_time_ms} ms, sample interval: {sample_interval_ms} ms")
-    print(f"Time(ms), Current({current_unit})")
-    
-    start_time = time.time()
-    elapsed_time_ms = 0
+def runAmp(user_gain, pre_stepV, quietTime, v1, t1, v2, t2, samples, range):
+    lmp91000_evm.potentialStat.disableFET()
+    lmp91000_evm.potentialStat.setGain(user_gain)
+    lmp91000_evm.potentialStat.setRLoad(0)
+    lmp91000_evm.potentialStat.setIntRefSource()
+    lmp91000_evm.potentialStat.setIntZ(1)
+    lmp91000_evm.potentialStat.setMode(3)  # Set to three-lead mode
+    lmp91000_evm.potentialStat.setBias(0)
 
-    while elapsed_time_ms < total_time_ms:
-        # Read voltage and calculate current
-        voltage = lmp91000_evm.getVolt()
-        raw_current = lmp91000_evm.get_current()
-        # Adjust unit based on current range
-        adjusted_current = raw_current * (10 ** current_range)
-        
-        # Get current time
-        elapsed_time_ms = (time.time() - start_time) * 1000  # Convert to milliseconds
-        times.append(elapsed_time_ms)
-        currents.append(adjusted_current)
-        
-        # Output data
-        print(f"{elapsed_time_ms:.2f}, {adjusted_current}")
-        
-        # Wait for the next sample
-        time.sleep(sample_interval_ms / 1000.0)
-    
-    # After measurement, set LMP91000 mode to standby
-    lmp91000_evm.potentialStat.setMode(LMP91000.MODE_STANDBY)
-    
-    # Return data for further processing or saving
-    return times, currents
+    # Print column headers
+    current_units = {
+        12: "Current(pA)",
+        9: "Current(nA)",
+        6: "Current(uA)",
+        3: "Current(mA)"
+    }
+    current_count = current_units.get(range, "SOME ERROR")
+    print("Voltage(mV),Time(ms),{}".format(current_count))
 
-def main():
-    # Example parameters
-    bias_voltage_mv = 500  # Bias voltage in mV
-    total_time_ms = 60000  # Total measurement time in ms (e.g., 60 seconds)
-    sample_interval_ms = 1000  # Sampling interval in ms (e.g., sample once per second)
-    tia_gain = LMP91000.TIA_GAIN_EXT  # Use external TIA gain (replace based on your configuration)
-    tia_zero = LMP91000.TIA_ZERO_50  # TIA zero setting (replace based on your configuration)
-    current_range = 6  # Current range (6 indicates μA)
+    voltageArray = [pre_stepV, v1, v2]
+    timeArray = [quietTime, t1, t2]
 
-    # Run constant potential coulometry measurement
-    times, currents = run_ca(bias_voltage_mv, total_time_ms, sample_interval_ms, tia_gain, tia_zero, current_range)
-    
-    # Optionally, save the data to a CSV file
-    with open('ca_data.csv', 'w') as f:
-        f.write('Time(ms),Current\n')
-        for t, i in zip(times, currents):
-            f.write(f"{t},{i}\n")
-    print("Measurement completed, data saved to ca_data.csv")
+    global step
+    step = 0
 
-if __name__ == "__main__":
-    main()
+    for i in range(3):
+        fs = timeArray[i] / samples  # Time per sample in ms
+        bias_index = determineLMP91000Bias(voltageArray[i])
+
+        # Set bias sign
+        lmp91000_evm.potentialStat.setBiasSign(0 if bias_index < 0 else 1)
+        lmp91000_evm.potentialStat.setBias(abs(bias_index))
+
+        startTime = time.time()
+        while (time.time() - startTime) * 1000 < timeArray[i]:
+            sign = bias_index / abs(bias_index) if bias_index != 0 else 0
+            computedValue = int(opVolt * TIA_BIAS[abs(bias_index)] * sign)
+            timestamp = int((time.time() - startTime) * 1000)
+            vout = lmp91000_evm.getVolt()
+            current = math.pow(10, range) * lmp91000_evm.get_current()
+            print("{}, {}, {:.2f}, {:.6f}, {}".format(step, computedValue, vout * 1000, current, timestamp))
+            time.sleep(fs / 1000.0)
+            step += 1
+
+    # End at 0V
+    lmp91000_evm.potentialStat.setBias(0)
+
+# Parameters
+v0 = 0    # milliVolts
+v1 = 800  # milliVolts
+v2 = 0    # milliVolts
+
+# Run the amperometric measurement
+runAmp(2, v0, 100, v1, 5000, v2, 5000, 300, 6)
