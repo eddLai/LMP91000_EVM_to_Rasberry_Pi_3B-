@@ -13,7 +13,6 @@ class ADC161S626:
         self.vref = adc_vref
 
         # Setup GPIO mode and pins
-        GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.mosi_pin, GPIO.OUT)
         GPIO.setup(self.miso_pin, GPIO.IN)
         GPIO.setup(self.sclk_pin, GPIO.OUT)

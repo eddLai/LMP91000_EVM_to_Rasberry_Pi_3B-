@@ -83,13 +83,12 @@ class LMP91000:
         self._zero = None
         self._ready = False
         self._locked = True
+        self._MENB = menb
         self.i2c_address = LMP91000_I2C_ADDRESS
-        GPIO.setmode(GPIO.BCM)
         self.bus = smbus2.SMBus(bus_number)
 
     # in Linner Lab Arduino code is called setMENB
-    def initMENB(self, pin: int):
-        self._MENB = pin
+    def initMENB(self):
         GPIO.setup(self._MENB, GPIO.OUT)
     
     def enable(self):
@@ -223,7 +222,7 @@ class LMP91000:
             data &= ~(1 << 7)  # 清除第7位以禁用 FET
         else:
             data |= (1 << 7)   # 設置第7位以啟用 FET
-        
+        print(f"i2c_address: {self.i2c_address}, type: {type(self.i2c_address)}")
         self.bus.write_byte_data(self.i2c_address, LMP91000_MODECN_REG, data)
         self.lock()
 
@@ -258,7 +257,7 @@ class LMP91000:
         else:
             pass
 
-        self.bus.write_byte_data(self.i2c_address, self.LMP91000_MODECN_REG, data)
+        self.bus.write_byte_data(self.i2c_address, LMP91000_MODECN_REG, data)
         self.lock()
 
     # # sets and gets MENB pin for enabling and disabling I2C commands

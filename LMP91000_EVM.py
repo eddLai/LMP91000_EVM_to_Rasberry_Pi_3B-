@@ -1,14 +1,14 @@
-import ADC161S626
-import LMP91000
+from ADC161S626 import ADC161S626
+from LMP91000 import LMP91000, TIA_BIAS, NUM_TIA_BIAS, TIA_ZERO, TIA_GAIN
 import time
 
 class LMP91000_EVM:
     def __init__(self, sda, scl, mosi, miso, sclk, cs, menb, sdrdy, led_debug) -> None:
         bus_num = None
-        if sda == 2 & scl == 3: bus_num = 1 
+        if sda == 2 and scl == 3: bus_num = 1 
         else: print("U should use I2C.1")
-        self.potentialStat = LMP91000.LMP91000(bus_num, menb) #include set BCM mode
-        self.adc = ADC161S626.ADC161S626(cs, mosi, miso, sclk, adc_vref=3.3)
+        self.potentialStat = LMP91000(bus_num, menb) #include set BCM mode
+        self.adc = ADC161S626(cs, mosi, miso, sclk, adc_vref=3.3)
 
     def getVolt(self):
         return self.adc.get_Volt()
@@ -24,10 +24,10 @@ class LMP91000_EVM:
     
     def get_current(self, isExtGain=0):
         voltage = self.getVolt()
-        voltage_zero = ADC161S626.vref * LMP91000.TIA_ZERO[self.zero]
+        voltage_zero = self.adc.vref * TIA_ZERO[self.potentialStat.zero]
         if isExtGain != 0:
             current = (voltage - voltage_zero) / isExtGain
         else:
-            current = (voltage - voltage_zero) / LMP91000.TIA_GAIN[self.gain]
+            current = (voltage - voltage_zero) / TIA_GAIN[self.potentialStat.gain]
         return current
     
