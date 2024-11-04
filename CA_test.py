@@ -1,5 +1,5 @@
 import RPi.GPIO as GPIO
-from LMP91000_EVM import LMP91000_EVM
+from LMP_class.LMP91000_EVM import LMP91000_EVM
 import spidev
 import time
 import math

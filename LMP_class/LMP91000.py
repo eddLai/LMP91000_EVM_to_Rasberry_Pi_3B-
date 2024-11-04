@@ -1,7 +1,6 @@
 import smbus2
 import RPi.GPIO as GPIO
 import time
-import ADC161S626
 
 TEMP_INTERCEPT = 1555.0
 TEMPSLOPE = -8.0
