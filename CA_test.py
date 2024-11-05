@@ -23,6 +23,7 @@ GPIO.setup(MOSI_PIN, GPIO.OUT)
 GPIO.setup(MISO_PIN, GPIO.IN)
 GPIO.setup(SCLK_PIN, GPIO.OUT)
 GPIO.setup(CS_PIN, GPIO.OUT)
+GPIO.setup(MENB_INT, GPIO.OUT)
 
 spi = spidev.SpiDev()
 spi.open(0, 0)  # 0 代表 SPI 0 介面，0 代表 CE0 (CS 引腳)

@@ -7,7 +7,7 @@ TEMPSLOPE = -8.0
 LMP91000_I2C_ADDRESS = 0x48
 
 LMP91000_STATUS_REG = 0x00  # Read only status register
-LMP91000_LOCK_REG = 0x01  # Protection Register
+LMP91000_LOCK_REG = 0x01  # Protection Register: disables the writing of the TIACN and the REFCN
 LMP91000_TIACN_REG = 0x10  # TIA Control Register
 LMP91000_REFCN_REG = 0x11  # Reference Control Register
 LMP91000_MODECN_REG = 0x12  # Mode Control Register
@@ -85,6 +85,16 @@ class LMP91000:
         self._MENB = menb
         self.i2c_address = LMP91000_I2C_ADDRESS
         self.bus = smbus2.SMBus(bus_number)
+        self.gain_mapping = {
+            0: "External resistor",
+            1: "2.75 kOhm",
+            2: "3.5 kOhm",
+            3: "7 kOhm",
+            4: "14 kOhm",
+            5: "35 kOhm",
+            6: "120 kOhm",
+            7: "350 kOhm"
+        }
 
     # in Linner Lab Arduino code is called setMENB
     def initMENB(self):
@@ -123,15 +133,25 @@ class LMP91000:
         self.gain = user_gain
         self.unlock()
         data = self.bus.read_byte_data(self.i2c_address, LMP91000_TIACN_REG)
+        print("old data: ", format(data, '08b'))
         # 清除第2-4位（用於增益設置）
         data &= ~(0x07 << 2)
+        print("clr data: ", format(data, '08b'))
         # 將user_gain參數的3個LSB寫入第2, 3, 4位
-        data |= (user_gain & 0x07 << 2)
+        data |= ((user_gain & 0x07) << 2)
+        print("asigned data: ", format(data, '08b'))
         self.bus.write_byte_data(self.i2c_address, LMP91000_TIACN_REG, data)
         self.lock()
         self.gain = user_gain
 
+    def getTIACN(self) -> float:
+        reg_val = self.bus.read_byte_data(self.i2c_address, LMP91000_TIACN_REG)
+        return reg_val
+
+
     def getGain(self) -> float:
+        tia_gain_bits = (self.getTIACN() >> 2) & 0x07
+        return self.gain_mapping.get(tia_gain_bits, "Invalid gain value")
         if self.gain == 0:
             return 0  # External resistor
         else:
@@ -153,22 +173,26 @@ class LMP91000:
     # 0 - internal reference
     # 1 - external reference
     def setRefSource(self, source: int):
+        self.unlock()
+        data = self.bus.read_byte_data(self.i2c_address, LMP91000_REFCN_REG)
         if source == 0:
-            self.setIntRefSource()
+            data &= ~(1 << 7)  # 清除第7位
         else:
-            self.setExtRefSource()
-
-    def setIntRefSource(self):
-        self.unlock()
-        data = self.bus.read_byte_data(self.i2c_address, LMP91000_REFCN_REG)
-        data &= ~(1 << 7)  # 清除第7位
+            data |= (1 << 7)  # 設置第7位
         self.bus.write_byte_data(self.i2c_address, LMP91000_REFCN_REG, data)
+        self.lock()
 
-    def setExtRefSource(self):
-        self.unlock()
-        data = self.bus.read_byte_data(self.i2c_address, LMP91000_REFCN_REG)
-        data |= (1 << 7)  # 設置第7位
-        self.bus.write_byte_data(self.i2c_address, LMP91000_REFCN_REG, data)
+    # def setIntRefSource(self):
+    #     self.unlock()
+    #     data = self.bus.read_byte_data(self.i2c_address, LMP91000_REFCN_REG)
+    #     data &= ~(1 << 7)  # 清除第7位
+    #     self.bus.write_byte_data(self.i2c_address, LMP91000_REFCN_REG, data)
+
+    # def setExtRefSource(self):
+    #     self.unlock()
+    #     data = self.bus.read_byte_data(self.i2c_address, LMP91000_REFCN_REG)
+    #     data |= (1 << 7)  # 設置第7位
+    #     self.bus.write_byte_data(self.i2c_address, LMP91000_REFCN_REG, data)
 
     # set the divider on V-ref
     # 0 - 00 - 20%
@@ -201,7 +225,22 @@ class LMP91000:
         data &= ~(0x0F)  # 清除前4位
         data |= bias  # 設置偏壓值
         self.bus.write_byte_data(self.i2c_address, LMP91000_REFCN_REG, data)
+
     # 0 is negative and 1 is positive
+    # 0000 - 0 - 0% (default)
+    # 0001 - 1 - 1%
+    # 0010 - 2 - 2%
+    # 0011 - 3 - 4%
+    # 0100 - 4 - 6%
+    # 0101 - 5 - 8%
+    # 0110 - 6 - 10%
+    # 0111 - 7 - 12%
+    # 1000 - 8 - 14%
+    # 1001 - 9 - 16%
+    # 1010 - 10 - 18%
+    # 1011 - 11 - 20%
+    # 1100 - 12 - 22%
+    # 1101 - 13 - 24%
     def setBiasWithSign(self, bias: int, sign: int):
         sign = 1 if sign > 0 else 0
         bias = bias if bias <= 13 else 0
@@ -225,12 +264,12 @@ class LMP91000:
         self.bus.write_byte_data(self.i2c_address, LMP91000_MODECN_REG, data)
         self.lock()
 
-
+    # OP mode
     # (mode == 2) standby();
     # (mode == 3) setThreeLead();
     # (mode == 1) setTwoLead();
-    # (mode == 4) measureCell();
-    # (mode == 5) getTemp();
+    # (mode == 4) measureCell(); TIA off
+    # (mode == 5) getTemp(); TIA on
     def setMode(self, mode: int):
         self.unlock()
         data = self.bus.read_byte_data(self.i2c_address, LMP91000_MODECN_REG)

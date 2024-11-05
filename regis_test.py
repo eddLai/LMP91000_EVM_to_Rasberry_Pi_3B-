@@ -38,3 +38,7 @@ adc_volt = 0.0
 current_step = 0  # 使用 current_step 代替 step 變量避免衝突
 
 lmp91000_evm = LMP91000_EVM(SDA, SCL, MOSI_PIN, MISO_PIN, SCLK_PIN, CS_PIN, MENB_INT, SDRDY, LED)
+lmp91000_evm.potentialStat.setGain(5)
+format(lmp91000_evm.potentialStat.getTIACN(), '08b')
+pot = lmp91000_evm.potentialStat
+format(pot.bus.read_byte_data(pot.i2c_address, 0x11), '08b')
